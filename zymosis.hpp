@@ -14,8 +14,8 @@
 #ifndef __ZYMOSIS_HPP__
 #define __ZYMOSIS_HPP__
 
-#pragma GCC optimize ("-Ofast")
-#pragma GCC push_options
+//#pragma GCC optimize ("-Ofast")
+//#pragma GCC push_options
 
 #include <cstdint>
 

@@ -1,5 +1,6 @@
-#pragma GCC optimize ("-Ofast")
-#pragma GCC push_options
+//#pragma GCC optimize ("-Ofast")
+//#pragma GCC push_options
+//v1.4 29.04.2020 new OTA for ESPboy App store v12 added (RomanS)
 //v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
 //v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
 //v1.1 23.12.2019  z80 format v3 support, improved frameskip, screen and controls config files
@@ -14,14 +15,15 @@
 
 #include <arduino.h>
 
-#include <Wire.h>
-#include <SPI.h>
-
 #include <Adafruit_MCP23017.h>
 #include <Adafruit_MCP4725.h>
 #include <ESP8266WiFi.h>
 #include <TFT_eSPI.h>
 #include <sigma_delta.h>
+#include "ESPboyOTA.h"
+#include "game.h"
+
+
 
 /*
    IMPORTANT: the project consumes a lot of RAM, to allow enough set
@@ -71,8 +73,8 @@
 Adafruit_MCP23017 mcp;
 Adafruit_MCP23017 mcpKeyboard;
 Adafruit_MCP4725 dac;
-
 TFT_eSPI tft = TFT_eSPI();
+ESPboyOTA* OTAobj = NULL;
 
 uint8_t pad_state;
 uint8_t pad_state_prev;
@@ -484,20 +486,28 @@ void unrle(uint8_t* mem, size_t sz)
 		}
 	}
 
-	uint8_t load_z80(const char* filename)
-	{
+
+
+	uint8_t load_z80(const char* filename){
 		uint8_t header[30];
 		int sz, len, ptr;
 		uint8_t rle;
-
-		fs::File f = SPIFFS.open(filename, "r");
-
+    uint32_t addr;
+    fs::File f;
+    
+  if(filename[0]){
+		f = SPIFFS.open(filename, "r");
 		if (!f) return 0;
-
 		sz = f.size();
 		f.readBytes((char*)header, sizeof(header));
-		sz -= sizeof(header);
+  }
+  else {
+    sz=sizeof(gameItself);
+    memcpy_P(&header[0], gameItself, sizeof(header));
+    }
 
+    sz -= sizeof(header);
+  
 		af.a = header[0];
 		af.f = header[1];
 		bc.c = header[2];
@@ -547,28 +557,41 @@ void unrle(uint8_t* mem, size_t sz)
 
 		if (pc) //v1 format
 		{
-			f.readBytes((char*)memory, sz);
-
+			if(filename[0])
+			  f.readBytes((char*)memory, sz);
+      else 
+        memcpy_P(memory, &gameItself[sizeof(header)], sz);
 			if (rle) unrle(memory, 16384 * 3);
 		}
 		else  //v2 or v3 format, features an extra header
 		{
 			//read actual PC from the extra header, skip rest of the extra header
-
-			f.readBytes((char*)header, 4);
+      if(filename[0])
+			  f.readBytes((char*)header, 4);
+      else 
+        memcpy_P((unsigned char *)&header, &gameItself[sizeof(header)], 4);
 			sz -= 4;
 
 			len = header[0] + header[1] * 256 + 2 - 4;
 			pc = header[2] + header[3] * 256;
-
-			f.seek(len, fs::SeekCur);
-			sz -= len;
-
+      
+      if(filename[0])
+			  f.seek(len, fs::SeekCur);
+      else
+        addr = len+sizeof(header)+4;
+      sz -= len;
+      
 			//unpack 16K pages
-
+      
 			while (sz > 0)
 			{
-				f.readBytes((char*)header, 3);
+        if(filename[0])
+				  f.readBytes((char*)header, 3);
+        else{
+          memcpy_P((unsigned char *)&header, &gameItself[addr], 3);
+          addr += 3;
+        }
+				
 				sz -= 3;
 
 				len = header[0] + header[1] * 256;
@@ -586,40 +609,57 @@ void unrle(uint8_t* mem, size_t sz)
 				{
 					ptr -= 0x4000;
 
-					f.readBytes((char*)&memory[ptr], len);
+          if(filename[0])
+					  f.readBytes((char*)&memory[ptr], len);
+          else{
+            memcpy_P((unsigned char *)&memory[ptr], &gameItself[addr], len);
+            addr+=len;}
+					
 					sz -= len;
 
 					if (len < 0xffff) unrle(&memory[ptr], 16384);
 				}
 				else
 				{
-					f.seek(len, fs::SeekCur);
+          if(filename[0])
+					  f.seek(len, fs::SeekCur);
+          else
+            addr+=len;
 					sz -= len;
 				}
 			}
 		}
 
-		f.close();
+		if (filename[0] != 0) f.close();
 
 		return 1;
 	}
 
-	uint8_t load_scr(const char* filename)
-	{
+
+
+uint8_t load_scr(const char* filename){
+ if  (filename[0]){
 		fs::File f = SPIFFS.open(filename, "r");
-
 		if (!f) return 0;
-
 		f.readBytes((char*)memory, 6912);
 		f.close();
-
 		memset(line_change, 0xff, sizeof(line_change));
-
 		return 1;
 	}
+ else{
+  if (gameScreenExist) {
+    memcpy_P(memory, gameScreen, 6912);
+    memset(line_change, 0xff, sizeof(line_change));
+    return 1;
+    }
+  else return 0;
+  }
+}
 };
 
+
 zymosis::Z80Cpu<Z48_ESPBoy> cpu;
+
 
 int check_key()
 {
@@ -629,25 +669,21 @@ int check_key()
 	return pad_state;
 }
 
+
+
 //0 no timeout, otherwise timeout in ms
 
-void wait_any_key(int timeout)
-{
+void wait_any_key(int timeout){
 	timeout /= 100;
-
 	while (1)
 	{
 		check_key();
-
 		if (pad_state_t & PAD_ANY) break;
-
 		if (timeout)
 		{
 			--timeout;
-
 			if (timeout <= 0) break;
 		}
-
 		delay(100);
 	}
 }
@@ -736,6 +772,7 @@ void printFast(int x, int y, char* str, int16_t color, int16_t bg)
 		x += 6;
 	}
 }
+
 
 void printFast_P(int x, int y, PGM_P str, int16_t color, int16_t bg)
 {
@@ -847,9 +884,12 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	if (!file_count)
 	{
-		printFast_P(24, 60, PSTR("No files found"), TFT_RED, 0);
-		while (1) delay(1000);
+		//printFast_P(1, 60, PSTR("Upload zx80 to SPIFFS"), TFT_RED, 0);
+		//delay(1000);
+    filename[0] = 0;
 	}
+  else
+  {
 
 	printFast_P(4, 4, (PGM_P)header, TFT_GREEN, 0);
 	tft.fillRect(0, 12, 128, 1, TFT_WHITE);
@@ -991,7 +1031,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 	{
 		control_type = CONTROL_PAD_KEMPSTON;
 	}
-
+  }
 	tft.fillScreen(TFT_BLACK);
 }
 
@@ -1016,10 +1056,10 @@ void ICACHE_RAM_ATTR sound_ISR()
 }
 
 
+uint8_t getKeys() { return (~mcp.readGPIOAB() & 255);}
 
 void zx_setup() {
 
-		WiFi.mode(WIFI_OFF); //disable wifi to save some battery power
 	//	Wire.setClock(1000000); //I2C to 1mHz
 
 		//DAC init, LCD backlit off
@@ -1053,6 +1093,13 @@ void zx_setup() {
 
 		dac.setVoltage(4095, true);
 
+
+
+    // check OTA WiFi OFF
+    if (getKeys()&PAD_ACT || getKeys()&PAD_ESC) OTAobj = new ESPboyOTA(&tft, &mcp);
+    WiFi.mode(WIFI_OFF);
+    delay(500);
+    
 		//keybModule init
 		Wire.begin();
 		Wire.beginTransmission(0x27); //check for MCP23017Keyboard at address 0x27
@@ -1104,8 +1151,8 @@ void sound_init(void)
 	interrupts();
 }
 
-void change_ext(char* fname, const uint32_t ext)
-{
+void change_ext(char* fname, const uint32_t ext){
+if(fname[0]!=0) 
 	while (1)
 	{
 		if (!*fname) break;
@@ -1153,12 +1200,15 @@ void zx_load_layout(char* filename)
 {
 	char cfg[8];
 
-	fs::File f = SPIFFS.open(filename, "r");
-
-	if (!f) return;
-
-	f.readBytes(cfg, 8);
-	f.close();
+	if(filename[0] != 0) {
+	  fs::File f = SPIFFS.open(filename, "r");
+    if (!f) return;
+    f.readBytes(cfg, 8);
+    f.close();
+	}
+  else{
+    memcpy_P(&cfg[0], gameControl, 8);
+  }
 
 	control_type = CONTROL_PAD_KEYBOARD;
 	control_pad_u = zx_layout_code(cfg[0]);
@@ -1270,8 +1320,8 @@ void zx_loop()
 
 		cpu.Z80_Reset();
 
-		if (*filename) // filename is not ""
-		{
+		//if (*filename) // filename is not ""
+		//{
 			change_ext(filename, EXT_CFG);
 			zx_load_layout(filename);
 
@@ -1285,7 +1335,7 @@ void zx_loop()
 			change_ext(filename, EXT_Z80);
 			cpu.Z80_Reset();
 			cpu.load_z80(filename);
-		}
+		//}
 
 		SPIFFS.end();
 
