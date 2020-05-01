@@ -1356,17 +1356,18 @@ void zx_loop()
 			//check keyboard module
 			if (keybModuleExist) keybModule();
 
+
 			switch (control_type)
 			{
 			case CONTROL_PAD_KEYBOARD:
-				key_matriz.set(control_pad_l, pad_state & PAD_LEFT);
-				key_matriz.set(control_pad_r, pad_state & PAD_RIGHT);
-				key_matriz.set(control_pad_u, pad_state & PAD_UP);
-				key_matriz.set(control_pad_d, pad_state & PAD_DOWN);
-				key_matriz.set(control_pad_act, pad_state & PAD_ACT);
-				key_matriz.set(control_pad_esc, pad_state & PAD_ESC);
-				key_matriz.set(control_pad_lft, pad_state & PAD_LFT);
-				key_matriz.set(control_pad_rgt, pad_state & PAD_RGT);
+				key_matriz.set(control_pad_l, key_matriz.test(control_pad_l)|pad_state & PAD_LEFT);
+				key_matriz.set(control_pad_r, key_matriz.test(control_pad_r)|pad_state & PAD_RIGHT);
+				key_matriz.set(control_pad_u, key_matriz.test(control_pad_u)|pad_state & PAD_UP);
+				key_matriz.set(control_pad_d, key_matriz.test(control_pad_d)|pad_state & PAD_DOWN);
+				key_matriz.set(control_pad_act, key_matriz.test(control_pad_act)|pad_state & PAD_ACT);
+				key_matriz.set(control_pad_esc, key_matriz.test(control_pad_esc)|pad_state & PAD_ESC);
+				key_matriz.set(control_pad_lft, key_matriz.test(control_pad_lft)|pad_state & PAD_LFT);
+				key_matriz.set(control_pad_rgt, key_matriz.test(control_pad_rgt)|pad_state & PAD_RGT);
 				break;
 
 			case CONTROL_PAD_KEMPSTON:
