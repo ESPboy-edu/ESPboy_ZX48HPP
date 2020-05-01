@@ -1,4 +1,4 @@
-# ESPboy_ZX48
+# ESPboy_ZX48HPP
 ESPboy emulator of the famous ZX Spectrum 48 machine. Let's play retro ZX48 games )
 
 v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
