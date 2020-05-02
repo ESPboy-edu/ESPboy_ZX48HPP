@@ -326,6 +326,7 @@ public:
 		zymosis::Z80Cpu<Z48_ESPBoy>* zcpu = reinterpret_cast<zymosis::Z80Cpu<Z48_ESPBoy>*>(this);
 
     sound_wr_ptr_l = sound_wr_ptr;
+
 		sacc = 0;
     sout = 0;
 		ticks = zcpu->Z80_Interrupt();
@@ -335,7 +336,6 @@ public:
 			sacc += n;
 
 			if (port_fe & 0x10) sout = 255;
-     else sout = 0;
 
 			if (sacc >= (ZX_CLOCK_FREQ / SAMPLE_RATE)){
 				sound_buffer[sound_wr_ptr_l] = sout;
@@ -346,6 +346,7 @@ public:
 				sacc -= ZX_CLOCK_FREQ / SAMPLE_RATE;
 			}
 			ticks += n;
+      sout = 0;
 		}
    sound_wr_ptr = sound_wr_ptr_l;
 	}
