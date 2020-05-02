@@ -1035,7 +1035,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 void ICACHE_RAM_ATTR sound_ISR(){
   static int_fast32_t prev_wr_prt;
   
-  if(prev_wr_prt != sound_wr_ptr){
+  if(prev_wr_prt != sound_wr_ptr && sound_wr_ptr != sound_rd_ptr){
      sound_rd_ptr++;
      if (sound_rd_ptr >= SOUND_BUFFER_SIZE) sound_rd_ptr = 0;
     }
