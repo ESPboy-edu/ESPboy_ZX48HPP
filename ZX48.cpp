@@ -103,7 +103,7 @@ uint8_t port_1f;  //kempston joystick
 
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 55;
-constexpr uint_fast32_t SAMPLE_RATE = 48000;   //more is better, but emulations gets slower
+constexpr uint_fast32_t SAMPLE_RATE = 44000;   //more is better, but emulations gets slower
 constexpr uint_fast32_t MAX_FRAMESKIP = 8;
 static uint_fast32_t TTOT; //pause delay to provide right fps, sets in setup();
 
@@ -173,10 +173,8 @@ enum {
 	CONTROL_PAD_KEMPSTON
 };
 
-volatile uint8_t sound_dac;
 
 constexpr size_t SOUND_BUFFER_SIZE = (SAMPLE_RATE / ZX_FRAME_RATE * 2);
-constexpr size_t SOUND_MIN_GAP = SOUND_BUFFER_SIZE / 10;
 
 volatile uint8_t* sound_buffer; // pointer to volatile array
 volatile uint16_t sound_wr_ptr;
@@ -321,39 +319,35 @@ protected:
 public:
 	ZYMOSIS_INLINE void emulateFrame()
 	{
-		static uint_fast32_t n, ticks, sacc, sout;
-
+		static uint_fast32_t n, ticks, sacc;
+    static uint_fast8_t sout;
+    static uint_fast32_t sound_wr_ptr_l;
+    
 		zymosis::Z80Cpu<Z48_ESPBoy>* zcpu = reinterpret_cast<zymosis::Z80Cpu<Z48_ESPBoy>*>(this);
 
+    sound_wr_ptr_l = sound_wr_ptr;
 		sacc = 0;
-		sout = 0;
+    sout = 0;
 		ticks = zcpu->Z80_Interrupt();
-
-		while (ticks < (ZX_CLOCK_FREQ / ZX_FRAME_RATE))
-		{
+    
+		while (ticks < (ZX_CLOCK_FREQ / ZX_FRAME_RATE)){
 			n = zcpu->Z80_ExecuteTS(8);
-
 			sacc += n;
 
-			if (port_fe & 0x10) sout += 127 * n;
+			if (port_fe & 0x10) sout = 255;
+     else sout = 0;
 
-			if (sacc >= (ZX_CLOCK_FREQ / SAMPLE_RATE))
-			{
-				sound_buffer[sound_wr_ptr] = sout / sacc;
-
-				if (sound_wr_ptr != sound_rd_ptr)
-				{
-					++sound_wr_ptr;
-
-					if (sound_wr_ptr >= SOUND_BUFFER_SIZE) sound_wr_ptr = 0;
+			if (sacc >= (ZX_CLOCK_FREQ / SAMPLE_RATE)){
+				sound_buffer[sound_wr_ptr_l] = sout;
+				if (sound_wr_ptr_l != sound_rd_ptr){
+					sound_wr_ptr_l++;
+					if (sound_wr_ptr_l >= SOUND_BUFFER_SIZE) sound_wr_ptr_l = 0;
 				}
-
 				sacc -= ZX_CLOCK_FREQ / SAMPLE_RATE;
-				sout = 0;
 			}
-
 			ticks += n;
 		}
+   sound_wr_ptr = sound_wr_ptr_l;
 	}
 
 
@@ -1037,22 +1031,16 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 
 
-void ICACHE_RAM_ATTR sound_ISR()
-{
-	size_t gap;
+void ICACHE_RAM_ATTR sound_ISR(){
+  static int_fast32_t prev_wr_prt;
+  
+  if(prev_wr_prt != sound_wr_ptr){
+     sound_rd_ptr++;
+     if (sound_rd_ptr >= SOUND_BUFFER_SIZE) sound_rd_ptr = 0;
+    }
 
-	sigmaDeltaWrite(0, sound_dac);
-
-	sound_dac = sound_buffer[sound_rd_ptr];
-
-	if (sound_rd_ptr < sound_wr_ptr) gap = sound_wr_ptr - sound_rd_ptr; else gap = SOUND_BUFFER_SIZE - sound_rd_ptr + sound_wr_ptr;
-
-	if (gap < SOUND_MIN_GAP)
-	{
-		++sound_rd_ptr;
-
-		if (sound_rd_ptr >= SOUND_BUFFER_SIZE) sound_rd_ptr = 0;
-	}
+ sigmaDeltaWrite(0, sound_buffer[sound_rd_ptr]);
+ prev_wr_prt=sound_wr_ptr;
 }
 
 
@@ -1098,7 +1086,8 @@ void zx_setup() {
     // check OTA WiFi OFF
     if (getKeys()&PAD_ACT || getKeys()&PAD_ESC) OTAobj = new ESPboyOTA(&tft, &mcp);
     WiFi.mode(WIFI_OFF);
-    delay(500);
+
+    espboy_logo_effect(0);   
     
 		//keybModule init
 		Wire.begin();
@@ -1125,7 +1114,13 @@ void zx_setup() {
     TTOT = ESP.getCpuFreqMHz()*1000000/ZX_FRAME_RATE;
 
 		//filesystem init
+    //printFast_P(8, 120, PSTR("File system init..."), TFT_NAVY, 0);
 		SPIFFS.begin();
+    
+    delay(2000);
+    espboy_logo_effect(1);
+    tft.fillScreen(TFT_BLACK);
+    delay(1000);
 }
 
 
@@ -1135,9 +1130,9 @@ void sound_init(void)
 
 	sound_buffer = (uint8_t*)malloc(SOUND_BUFFER_SIZE);
 
-	for (i = 0; i < SOUND_BUFFER_SIZE; ++i) sound_buffer[i] = 0;
+	//for (i = 0; i < SOUND_BUFFER_SIZE; ++i) sound_buffer[i] = 0;
+  memset((uint8_t *)sound_buffer,0, SOUND_BUFFER_SIZE);
 
-	sound_dac = 0;
 	sound_rd_ptr = 0;
 	sound_wr_ptr = 0;
 
@@ -1309,13 +1304,12 @@ void zx_loop()
 		control_pad_esc = K_ENTER;
 		control_pad_lft = K_NULL;
 		control_pad_rgt = K_NULL;
-
-		if (espboy_logo_effect(0))
-		{
+/*
+		if (espboy_logo_effect(0)){   
 			wait_any_key(1000);
 			espboy_logo_effect(1);
 		}
-
+*/
 		file_browser("/", F("Load .Z80:"), filename, sizeof(filename));
 
 		cpu.Z80_Reset();
