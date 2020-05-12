@@ -326,7 +326,6 @@ public:
 		zymosis::Z80Cpu<Z48_ESPBoy>* zcpu = reinterpret_cast<zymosis::Z80Cpu<Z48_ESPBoy>*>(this);
 
     sound_wr_ptr_l = sound_wr_ptr;
-
 		sacc = 0;
     sout = 0;
 		ticks = zcpu->Z80_Interrupt();
@@ -1039,7 +1038,7 @@ void ICACHE_RAM_ATTR sound_ISR(){
      sound_rd_ptr++;
      if (sound_rd_ptr >= SOUND_BUFFER_SIZE) sound_rd_ptr = 0;
     }
-
+    
  sigmaDeltaWrite(0, sound_buffer[sound_rd_ptr]);
  prev_wr_prt=sound_wr_ptr;
 }

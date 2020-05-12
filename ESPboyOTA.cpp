@@ -347,9 +347,11 @@ boolean ESPboyOTA::connectWifi() {
   if (wificl.ssid == "1" && wificl.pass == "1" && !(getKeys()&OTA_PAD_ESC) && (WiFi.SSID()!="")) {
     wificl.ssid = WiFi.SSID();
     wificl.pass = WiFi.psk();
-    printConsole(F("Last network:"), TFT_MAGENTA, 0, 0);
+    printConsole(F("Last network:"), TFT_GREEN, 0, 0);
     printConsole(wificl.ssid, TFT_MAGENTA, 0, 0);
   } else {
+    wificl.ssid = "";
+    wificl.pass = "";
     if (scanWiFi())
       for (uint8_t i = wfList.size(); i > 0; i--) {
         String toPrint =

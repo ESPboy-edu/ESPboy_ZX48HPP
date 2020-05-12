@@ -1,4 +1,4 @@
-//v1.4 29.04.2020 new OTA for ESPboy App store and reads a game from PROGMEM if no ine on SPIFFS (RomanS)
+//v1.4 29.04.2020 new OTA for ESPboy App store, reading the game from PROGMEM if no one on SPIFFS, sound noise bugfix (RomanS)
 //v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
 //v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
 //v1.1 23.12.2019  z80 format v3 support, improved frameskip, screen and controls config files
