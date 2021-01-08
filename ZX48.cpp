@@ -22,7 +22,7 @@
 #include <sigma_delta.h>
 #include "ESPboyOTA.h"
 #include "game.h"
-
+#include "LittleFS.h"
 
 
 /*
@@ -37,7 +37,7 @@
 
    Set SPI_FREQUENCY to 39000000 for best performance.
 
-   Games should be uploaded into SPIFFS as 48K .z80 snapshots (v1,v2,v3)
+   Games should be uploaded into LittleFS as 48K .z80 snapshots (v1,v2,v3)
    You can create such snapshots using ZXSPIN emulator
 
    You can also put a 6912 byte screen with the exact same name to be displayed before game
@@ -108,7 +108,6 @@ constexpr uint_fast32_t MAX_FRAMESKIP = 8;
 static uint_fast32_t TTOT; //pause delay to provide right fps, sets in setup();
 
 #define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
-inline uint16_t LHSWAP(uint16_t w) { return (w >> 8) | (w << 8); }
 
 enum {
 	K_CS = 0, K_Z, K_X, K_C, K_V,
@@ -351,7 +350,7 @@ public:
 	}
 
 
-ZYMOSIS_INLINE void renderFrame()
+/*ZYMOSIS_INLINE */void ICACHE_RAM_ATTR renderFrame()
 	{
 		static uint16_t ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		static uint_fast16_t ink, pap;
@@ -383,7 +382,7 @@ ZYMOSIS_INLINE void renderFrame()
 			tft.startWrite();
 			border_changed = false;
 
-			col = LHSWAP(palette[port_fe & 7] << 2);
+			col = palette[port_fe & 7] << 2;
 			tft.setAddrWindow(0, 0, 128, 16);
 			tft.writeColor(col, 2048);
 			tft.setAddrWindow(0, 112, 128, 16);
@@ -490,7 +489,7 @@ void unrle(uint8_t* mem, size_t sz)
     fs::File f;
     
   if(filename[0]){
-		f = SPIFFS.open(filename, "r");
+		f = LittleFS.open(filename, "r");
 		if (!f) return 0;
 		sz = f.size();
 		f.readBytes((char*)header, sizeof(header));
@@ -633,7 +632,7 @@ void unrle(uint8_t* mem, size_t sz)
 
 uint8_t load_scr(const char* filename){
  if  (filename[0]){
-		fs::File f = SPIFFS.open(filename, "r");
+		fs::File f = LittleFS.open(filename, "r");
 		if (!f) return 0;
 		f.readBytes((char*)memory, 6912);
 		f.close();
@@ -707,7 +706,7 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				col = pgm_read_byte(&bitmap[off++]);
 				rgb = pgm_read_dword(&bitmap[54 + col * 4]);
 				c16 = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
-				line_buffer[j] = LHSWAP(c16);
+				line_buffer[j] = c16;
 			}
 
 			tft.pushImage(x, y + i, w, 1, line_buffer);
@@ -724,7 +723,7 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				col = pgm_read_byte(&bitmap[off]);
 				rgb = pgm_read_dword(&bitmap[54 + col * 4]);
 				c16 = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
-				line_buffer[j] = LHSWAP(c16);
+				line_buffer[j] = c16;
 				off -= wa;
 			}
 
@@ -746,7 +745,7 @@ void drawCharFast(uint16_t x, uint16_t y, uint8_t c, uint16_t color, uint16_t bg
 		for (j = 0; j < 8; ++j)
 		{
 			c16 = (line & 1) ? color : bg;
-			line_buffer[j * 5 + i] = LHSWAP(c16);
+			line_buffer[j * 5 + i] = c16;
 			line >>= 1;
 		}
 	}
@@ -852,7 +851,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 	uint8_t change, filter;
 	fs::Dir dir;
 	fs::File entry;
-	char name[19 + 1];
+	char name[31 + 1];
 	const char* str;
 
 	memset(fname, 0, fname_len);
@@ -860,7 +859,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	tft.fillScreen(TFT_BLACK);
 
-	dir = SPIFFS.openDir(path);
+	dir = LittleFS.openDir(path);
 
 	file_count = 0;
 	control_type = 0;
@@ -878,7 +877,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	if (!file_count)
 	{
-		//printFast_P(1, 60, PSTR("Upload zx80 to SPIFFS"), TFT_RED, 0);
+		//printFast_P(1, 60, PSTR("Upload zx80 to LittleFS"), TFT_RED, 0);
 		//delay(1000);
     filename[0] = 0;
 	}
@@ -902,7 +901,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			if (pos > file_count - FILE_HEIGHT) pos = file_count - FILE_HEIGHT;
 			if (pos < 0) pos = 0;
 
-			dir = SPIFFS.openDir(path);
+			dir = LittleFS.openDir(path);
 			i = pos;
 			while (dir.next())
 			{
@@ -929,11 +928,11 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 				if (filter)
 				{
-					str = entry.name() + 1;
-
-					for (j = 0; j < sizeof(name) - 1; ++j)
+					str = entry.name();
+					for (j = 0; j < sizeof(name) - 1; j++)
 					{
-						if (*str != 0 && *str != '.') name[j] = *str++; else name[j] = ' ';
+						if (*str != 0 && *str != '.') name[j] = *str++; 
+						else name[j] = ' ';
 					}
 
 					printFast(8, sy, name, TFT_WHITE, 0);
@@ -1047,8 +1046,8 @@ void ICACHE_RAM_ATTR sound_ISR(){
 uint8_t getKeys() { return (~mcp.readGPIOAB() & 255);}
 
 void zx_setup() {
-
-	//	Wire.setClock(1000000); //I2C to 1mHz
+    //system_update_cpu_freq(SYS_CPU_160MHZ);
+	  //	Wire.setClock(1000000); //I2C to 1mHz
 
 		//DAC init, LCD backlit off
 		dac.begin(MCP4725address);
@@ -1078,6 +1077,7 @@ void zx_setup() {
 		tft.begin();
 		tft.setRotation(0);
 		tft.fillScreen(TFT_BLACK);
+    tft.setSwapBytes(true);
 
 		dac.setVoltage(4095, true);
 
@@ -1115,7 +1115,7 @@ void zx_setup() {
 
 		//filesystem init
     //printFast_P(8, 120, PSTR("File system init..."), TFT_NAVY, 0);
-		SPIFFS.begin();
+		LittleFS.begin();
     
     delay(2000);
     espboy_logo_effect(1);
@@ -1196,7 +1196,7 @@ void zx_load_layout(char* filename)
 	char cfg[8];
 
 	if(filename[0] != 0) {
-	  fs::File f = SPIFFS.open(filename, "r");
+	  fs::File f = LittleFS.open(filename, "r");
     if (!f) return;
     f.readBytes(cfg, 8);
     f.close();
@@ -1331,7 +1331,7 @@ void zx_loop()
 			cpu.load_z80(filename);
 		//}
 
-		SPIFFS.end();
+		LittleFS.end();
 
 		memset(line_change, 0xff, sizeof(line_change));
 		sound_init();

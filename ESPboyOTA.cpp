@@ -637,7 +637,7 @@ void ESPboyOTA::drawCharFast(uint16_t x, uint16_t y, uint8_t c, uint16_t color, 
     line = pgm_read_byte(&font[c * 5 + i]);
     for (j = 0; j < 8; ++j){
       c16 = (line & 1) ? color : bg;
-      line_bf[j * 5 + i] = LHSWAP_(c16);
+      line_bf[j * 5 + i] = c16;
       line >>= 1;
     }
   }

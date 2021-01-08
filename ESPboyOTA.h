@@ -9,8 +9,6 @@ Corax, AlRado, Torabora, MLXXXP for tests and advices.
 #ifndef ESPboy_OTA
 #define ESPboy_OTA
 
-#define LHSWAP_(w)       (((w)>>8)|((w)<<8))
-
 #include <Adafruit_MCP23017.h>
 #include <TFT_eSPI.h>
 #include <HTTPSRedirect.h>
