@@ -20,7 +20,6 @@
 #include <ESP8266WiFi.h>
 #include <TFT_eSPI.h>
 #include <sigma_delta.h>
-#include "ESPboyOTA.h"
 #include "game.h"
 #include "LittleFS.h"
 
@@ -74,7 +73,6 @@ Adafruit_MCP23017 mcp;
 Adafruit_MCP23017 mcpKeyboard;
 Adafruit_MCP4725 dac;
 TFT_eSPI tft = TFT_eSPI();
-ESPboyOTA* OTAobj = NULL;
 
 uint8_t pad_state;
 uint8_t pad_state_prev;
@@ -1081,10 +1079,6 @@ void zx_setup() {
 
 		dac.setVoltage(4095, true);
 
-
-
-    // check OTA WiFi OFF
-    if (getKeys()&PAD_ACT || getKeys()&PAD_ESC) OTAobj = new ESPboyOTA(&tft, &mcp);
     WiFi.mode(WIFI_OFF);
 
     espboy_logo_effect(0);   

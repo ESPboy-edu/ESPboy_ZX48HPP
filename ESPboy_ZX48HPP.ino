@@ -10,8 +10,8 @@
 //uses Z80 core by Ketmar
 
 
-#include "User_Setup.h"
-#define USER_SETUP_LOADED
+//#include "User_Setup.h"
+//#define USER_SETUP_LOADED
 
 #include <arduino.h>
 
