@@ -1,3 +1,4 @@
+//v1.6 02.05.2021 back to SPIFFS, tuning FileBrowser (RomanS)
 //v1.5 25.04.2021 del OTA, change SPIFFS to Little FS, fixed render (border) fixed file list navigation (RomanS)
 //v1.4 29.04.2020 new OTA for ESPboy App store, reading the game from PROGMEM if no one on SPIFFS, sound noise bugfix (RomanS)
 //v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
