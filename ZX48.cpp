@@ -27,7 +27,7 @@
 
 #include <sigma_delta.h>
 #include "game.h"
-#include "LittleFS.h"
+#include "FS.h"
 
 
 /*
@@ -42,7 +42,7 @@
 
    Set SPI_FREQUENCY to 39000000 for best performance.
 
-   Games should be uploaded into LittleFS as 48K .z80 snapshots (v1,v2,v3)
+   Games should be uploaded into SPIFFS as 48K .z80 snapshots (v1,v2,v3)
    You can create such snapshots using ZXSPIN emulator
 
    You can also put a 6912 byte screen with the exact same name to be displayed before game
@@ -455,7 +455,7 @@ void unrle(uint8_t* mem, size_t sz)
     fs::File f;
     
   if(filename[0]){
-		f = LittleFS.open(filename, "r");
+		f = SPIFFS.open(filename, "r");
 		if (!f) return 0;
 		sz = f.size();
 		f.readBytes((char*)header, sizeof(header));
@@ -598,7 +598,7 @@ void unrle(uint8_t* mem, size_t sz)
 
 uint8_t load_scr(const char* filename){
  if  (filename[0]){
-		fs::File f = LittleFS.open(filename, "r");
+		fs::File f = SPIFFS.open(filename, "r");
 		if (!f) return 0;
 		f.readBytes((char*)memory, 6912);
 		f.close();
@@ -827,7 +827,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	myESPboy.tft.fillScreen(TFT_BLACK);
 
-	dir = LittleFS.openDir(path);
+	dir = SPIFFS.openDir(path);
 
 	file_count = 0;
 	control_type = 0;
@@ -845,7 +845,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	if (!file_count)
 	{
-		//printFast_P(1, 60, PSTR("Upload zx80 to LittleFS"), TFT_RED, 0);
+		//printFast_P(1, 60, PSTR("Upload zx80 to SPIFFS"), TFT_RED, 0);
 		//delay(1000);
     filename[0] = 0;
 	}
@@ -869,7 +869,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			if (pos > file_count - FILE_HEIGHT) pos = file_count - FILE_HEIGHT;
 			if (pos < 0) pos = 0;
 
-			dir = LittleFS.openDir(path);
+			dir = SPIFFS.openDir(path);
 			i = pos;
 			while (dir.next())
 			{
@@ -942,6 +942,8 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			change = 1;
 			frame = 0;
 
+      delay(100);
+
 		}
 
 		if (myESPboy.getKeys() & PAD_DOWN)
@@ -952,6 +954,8 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 			change = 1;
 			frame = 0;
+
+      delay(100);
 		}
 
 		if (myESPboy.getKeys() & PAD_ACT)
@@ -959,10 +963,13 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			++control_type;
 			if (control_type >= CONTROL_TYPES) control_type = 0;
 			change = 1;
+
+      delay(100);
 		}
 
 		if (myESPboy.getKeys() & PAD_ESC) break;
 
+     delay(100);
 		/*if ((pad_state & PAD_LFT) || (pad_state & PAD_RGT)) {
 			fname[0] = 0;
 			break;
@@ -1052,7 +1059,7 @@ void zx_setup() {
 
 		//filesystem init
     //printFast_P(8, 120, PSTR("File system init..."), TFT_NAVY, 0);
-		LittleFS.begin();
+		SPIFFS.begin();
     
     delay(2000);
     espboy_logo_effect(1);
@@ -1133,7 +1140,7 @@ void zx_load_layout(char* filename)
 	char cfg[8];
 
 	if(filename[0] != 0) {
-	  fs::File f = LittleFS.open(filename, "r");
+	  fs::File f = SPIFFS.open(filename, "r");
     if (!f) return;
     f.readBytes(cfg, 8);
     f.close();
@@ -1269,7 +1276,7 @@ void zx_loop()
 			cpu.load_z80(filename);
 		//}
 
-		LittleFS.end();
+		SPIFFS.end();
 
     pad_state = 0;
     pad_state_prev = 0;
