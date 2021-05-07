@@ -1,5 +1,6 @@
-//#pragma GCC optimize ("-Ofast")
-//#pragma GCC push_options
+#pragma GCC optimize ("-Ofast")
+#pragma GCC push_options
+
 //v1.4 29.04.2020 new OTA for ESPboy App store v12 added (RomanS)
 //v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
 //v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
@@ -12,13 +13,18 @@
 //uses Z80 core by Ketmar
 
 
-
 #include <arduino.h>
 
-#include <Adafruit_MCP23017.h>
-#include <Adafruit_MCP4725.h>
-#include <ESP8266WiFi.h>
-#include <TFT_eSPI.h>
+#include "lib/ESPboyInit.h"
+#include "lib/ESPboyInit.cpp"
+
+#include "zymosis.hpp"
+
+#include "glcdfont.c"
+#include "gfx/espboy.h"
+#include "gfx/keyboard.h"
+#include "rom/rom.h"
+
 #include <sigma_delta.h>
 #include "game.h"
 #include "LittleFS.h"
@@ -56,40 +62,18 @@
    game.scr - splash screen in native ZX Spectrum format
 */
 
-#include "zymosis.hpp"
 
-#include "glcdfont.c"
-#include "gfx/espboy.h"
-#include "gfx/keyboard.h"
-#include "rom/rom.h"
 
-#define MCP23017address 0 // actually it's 0x20 but in <Adafruit_MCP23017.h> lib there is (x|0x20) :)
-#define MCP4725address 0x60
-#define LEDPIN         D4
-#define SOUNDPIN       D3
-#define csTFTMCP23017pin 8 //SPI for LCD
-
-Adafruit_MCP23017 mcp;
+ESPboyInit myESPboy;
 Adafruit_MCP23017 mcpKeyboard;
-Adafruit_MCP4725 dac;
-TFT_eSPI tft = TFT_eSPI();
+
 
 uint8_t pad_state;
 uint8_t pad_state_prev;
 uint8_t pad_state_t;
 uint8_t keybModuleExist;
 
-#define PAD_LEFT        0x01
-#define PAD_UP          0x02
-#define PAD_DOWN        0x04
-#define PAD_RIGHT       0x08
-#define PAD_ACT         0x10
-#define PAD_ESC         0x20
-#define PAD_LFT         0x40
-#define PAD_RGT         0x80
-#define PAD_ANY         0xff
-
-uint16_t line_buffer[128];
+static uint16_t line_buffer[128] __attribute__ ((aligned));
 
 bool border_changed = false;
 
@@ -306,7 +290,7 @@ protected:
 	{
 		if (!(port & 0x01))
 		{
-			if ((port_fe & 7) != (value & 7)) border_changed = 1; //update border
+			if ((port_fe & 7) != (value & 7)) border_changed = true; //update border
 
 			port_fe = value;
 		}
@@ -350,7 +334,7 @@ public:
 
 /*ZYMOSIS_INLINE */void ICACHE_RAM_ATTR renderFrame()
 	{
-		static uint16_t ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
+		static uint16_t i, j, ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		static uint_fast16_t ink, pap;
 		static uint_fast16_t col = 0;
 		static uint8_t line1, line2;
@@ -375,75 +359,59 @@ public:
 		};
 
 
-		if (border_changed)
-		{
-			tft.startWrite();
-			border_changed = false;
 
-			col = palette[port_fe & 7] << 2;
-			tft.setAddrWindow(0, 0, 128, 16);
-			tft.writeColor(col, 2048);
-			tft.setAddrWindow(0, 112, 128, 16);
-			tft.writeColor(col, 2048);
-			tft.endWrite();
-		}
+  if (border_changed)
+  {
+    border_changed = false;
 
-		row = 16;
+    col = palette[port_fe & 7] << 2;
+    myESPboy.tft.fillRect(0,0,128,16,col);
+    myESPboy.tft.fillRect(0,112,128,16,col);
+  }
 
-		for (ln = 0; ln < 192; ln += 2)
-		{
-			if (!(line_change[ln / 8] & (3 << (ln & 7))))
-			{
-				++row;
-				continue;
-			}
+  row = 16;
 
-			line_change[ln / 8] &= ~(3 << (ln & 7));
+  for (ln = 0; ln < 192; ln += 2)
+  {
+    if (!(line_change[ln / 8] & (3 << (ln & 7))))
+    {
+      ++row;
+      continue;
+    }
 
-			pptr1 = (ln & 7) * 256 + ((ln / 8) & 7) * 32 + (ln / 64) * 2048;
-			pptr2 = pptr1 + 256;
-			aptr = 6144 + ln / 8 * 32;
-			optr = 0;
+    line_change[ln / 8] &= ~(3 << (ln & 7));
 
-			for (ch = 0; ch < 32; ++ch)
-			{
-				attr = memory[aptr++];
-				bright = (attr & 0x40) ? 8 : 0;
-				ink = palette[(attr & 7) + bright];
-				pap = palette[((attr >> 3) & 7) + bright];
+    pptr1 = (ln & 7) * 256 + ((ln / 8) & 7) * 32 + (ln / 64) * 2048;
+    pptr2 = pptr1 + 256;
+    aptr = 6144 + ln / 8 * 32;
+    optr = 0;
 
-				line1 = memory[pptr1++];
-				line2 = memory[pptr2++];
-				px = 4;
-				while (px--)
-				{
-					switch ((line1 >> 6) | ((line2 & 0xC0) >> 4))
-					{
-					case 0x00: col = pap * 4; break;
-					case 0x01:
-					case 0x02:
-					case 0x04:
-					case 0x08: col = ink + pap * 3; break;
-					case 0x07:
-					case 0x0B:
-					case 0x0D:
-					case 0x0E: col = ink * 3 + pap; break;
-					case 0x0F: col = ink * 4; break;
-					default: col = ink * 2 + pap * 2;
-					}
+    for (ch = 0; ch < 32; ++ch)
+    {
+      attr = memory[aptr++];
+      bright = (attr & 0x40) ? 8 : 0;
+      ink = palette[(attr & 7) + bright];
+      pap = palette[((attr >> 3) & 7) + bright];
 
-					line_buffer[optr++] = col;
+      line1 = memory[pptr1++];
+      line2 = memory[pptr2++];
 
-					line1 <<= 2;
-					line2 <<= 2;
-				}
-			}
+      for (px = 0; px < 8; px += 2)
+      {
+        col = (line1 & 0x80) ? ink : pap;
+        col += (line1 & 0x40) ? ink : pap;
+        col += (line2 & 0x80) ? ink : pap;
+        col += (line2 & 0x40) ? ink : pap;
 
-			tft.startWrite();
-			tft.setAddrWindow(0, row++, 128, 1);
-			tft.pushColors(line_buffer, 128, true);
-			tft.endWrite();
-		}
+        line_buffer[optr++] = col;
+
+        line1 <<= 2;
+        line2 <<= 2;
+      }
+    }
+
+    myESPboy.tft.pushImage(0, row++, 128, 1, line_buffer);
+  }
 
  static uint_fast32_t startTime;
  while (((ESP.getCycleCount()) - startTime) < TTOT /*it's global, sets in setup()*/);
@@ -654,11 +622,13 @@ zymosis::Z80Cpu<Z48_ESPBoy> cpu;
 
 int check_key()
 {
-	pad_state_prev = pad_state;
-	pad_state = ~mcp.readGPIOAB() & 255;
-	pad_state_t = (pad_state ^ pad_state_prev) & pad_state;
-	return pad_state;
+  pad_state_prev = pad_state;
+  pad_state = myESPboy.getKeys();
+  pad_state_t = (pad_state ^ pad_state_prev) & pad_state;
+  return pad_state;
 }
+
+
 
 
 
@@ -669,7 +639,7 @@ void wait_any_key(int timeout){
 	while (1)
 	{
 		check_key();
-		if (pad_state_t & PAD_ANY) break;
+		if (myESPboy.getKeys()) break;
 		if (timeout)
 		{
 			--timeout;
@@ -707,7 +677,7 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				line_buffer[j] = c16;
 			}
 
-			tft.pushImage(x, y + i, w, 1, line_buffer);
+			myESPboy.tft.pushImage(x, y + i, w, 1, line_buffer);
 		}
 	}
 	else
@@ -725,7 +695,7 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				off -= wa;
 			}
 
-			tft.pushImage(x + i, y, 1, h, line_buffer);
+			myESPboy.tft.pushImage(x + i, y, 1, h, line_buffer);
 		}
 	}
 }
@@ -748,7 +718,7 @@ void drawCharFast(uint16_t x, uint16_t y, uint8_t c, uint16_t color, uint16_t bg
 		}
 	}
 
-	tft.pushImage(x, y, 5, 8, line_buffer);
+	myESPboy.tft.pushImage(x, y, 5, 8, line_buffer);
 }
 
 
@@ -855,7 +825,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 	memset(fname, 0, fname_len);
 	memset(name, 0, sizeof(name));
 
-	tft.fillScreen(TFT_BLACK);
+	myESPboy.tft.fillScreen(TFT_BLACK);
 
 	dir = LittleFS.openDir(path);
 
@@ -883,7 +853,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
   {
 
 	printFast_P(4, 4, (PGM_P)header, TFT_GREEN, 0);
-	tft.fillRect(0, 12, 128, 1, TFT_WHITE);
+	myESPboy.tft.drawFastHLine(0, 12, 128, TFT_WHITE);
 
 	change = 1;
 	frame = 0;
@@ -961,9 +931,9 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			change = 0;
 		}
 
-		check_key();
+		//check_key();
 
-		if (pad_state_t & PAD_UP)
+		if (myESPboy.getKeys() & PAD_UP)
 		{
 			--file_cursor;
 
@@ -974,7 +944,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 		}
 
-		if (pad_state_t & PAD_DOWN)
+		if (myESPboy.getKeys() & PAD_DOWN)
 		{
 			++file_cursor;
 
@@ -984,14 +954,14 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			frame = 0;
 		}
 
-		if (pad_state_t & PAD_ACT)
+		if (myESPboy.getKeys() & PAD_ACT)
 		{
 			++control_type;
 			if (control_type >= CONTROL_TYPES) control_type = 0;
 			change = 1;
 		}
 
-		if (pad_state_t & PAD_ESC) break;
+		if (myESPboy.getKeys() & PAD_ESC) break;
 
 		/*if ((pad_state & PAD_LFT) || (pad_state & PAD_RGT)) {
 			fname[0] = 0;
@@ -1023,7 +993,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 		control_type = CONTROL_PAD_KEMPSTON;
 	}
   }
-	tft.fillScreen(TFT_BLACK);
+	myESPboy.tft.fillScreen(TFT_BLACK);
 }
 
 
@@ -1041,46 +1011,19 @@ void ICACHE_RAM_ATTR sound_ISR(){
 }
 
 
-uint8_t getKeys() { return (~mcp.readGPIOAB() & 255);}
 
 void zx_setup() {
     //system_update_cpu_freq(SYS_CPU_160MHZ);
 	  //	Wire.setClock(1000000); //I2C to 1mHz
 
-		//DAC init, LCD backlit off
-		dac.begin(MCP4725address);
-		delay(100);
-		dac.setVoltage(0, false);
-		delay(100);
-
-		//mcp23017 and buttons init, should preceed the TFT init
-		mcp.begin(MCP23017address);
-		delay(100);
-
-		for (int i = 0; i < 8; ++i)
-		{
-			mcp.pinMode(i, INPUT);
-			mcp.pullUp(i, HIGH);
-		}
-
 		pad_state = 0;
 		pad_state_prev = 0;
 		pad_state_t = 0;
 
-		//TFT init
-
-		mcp.pinMode(csTFTMCP23017pin, OUTPUT);
-		mcp.digitalWrite(csTFTMCP23017pin, LOW);
-
-		tft.begin();
-		tft.setRotation(0);
-		tft.fillScreen(TFT_BLACK);
-    tft.setSwapBytes(true);
-
-		dac.setVoltage(4095, true);
-
-    WiFi.mode(WIFI_OFF);
-
+     //Init ESPboy
+    myESPboy.begin("ZX Spectrum 48k");
+  
+  
     espboy_logo_effect(0);   
     
 		//keybModule init
@@ -1113,7 +1056,7 @@ void zx_setup() {
     
     delay(2000);
     espboy_logo_effect(1);
-    tft.fillScreen(TFT_BLACK);
+    myESPboy.tft.fillScreen(TFT_BLACK);
     delay(1000);
 }
 
@@ -1245,7 +1188,7 @@ void keybModule() {
 
 
 void redrawOnscreen(uint8_t slX, uint8_t slY, uint8_t shf) {
-	tft.fillRect(0, 128 - 16, 128, 16, TFT_BLACK);
+	myESPboy.tft.fillRect(0, 128 - 16, 128, 16, TFT_BLACK);
 	for (uint8_t i = 0; i < 20; i++) drawCharFast(i * 6 + 4, 128 - 16, pgm_read_byte(&keybOnscr[0][i]), TFT_YELLOW, TFT_BLACK);
 	for (uint8_t i = 0; i < 20; i++) drawCharFast(i * 6 + 4, 128 - 8, pgm_read_byte(&keybOnscr[1][i]), TFT_YELLOW, TFT_BLACK);
 	drawCharFast(slX * 6 + 4, 128 - 16 + slY * 8, pgm_read_byte(&keybOnscr[slY][slX]), TFT_RED, TFT_BLACK);
@@ -1277,7 +1220,7 @@ void keybOnscreen() {
 	if (pad_state & PAD_ACT && (shifts & 2)) key_matriz.set(K_SS);
 	delay(300);
 	check_key();
-	tft.fillRect(0, 128 - 16, 128, 16, TFT_BLACK);
+	myESPboy.tft.fillRect(0, 128 - 16, 128, 16, TFT_BLACK);
 	memset(line_change, 0xff, sizeof(line_change));
 }
 
@@ -1317,6 +1260,7 @@ void zx_loop()
 			if (cpu.load_scr(filename))
 			{
 				cpu.renderFrame();
+        delay(500);
 				wait_any_key(3 * 1000);
 			}
 
@@ -1326,6 +1270,10 @@ void zx_loop()
 		//}
 
 		LittleFS.end();
+
+    pad_state = 0;
+    pad_state_prev = 0;
+    pad_state_t = 0;
 
 		memset(line_change, 0xff, sizeof(line_change));
 		sound_init();
