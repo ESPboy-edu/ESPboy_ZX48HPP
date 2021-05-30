@@ -128,7 +128,7 @@ namespace zymosis {
 		return 0;
 	}
 #elif defined(ZYMOSIS_FLAGS_IN_FUNCTION2)
-	ZYMOSIS_INLINE uint8_t fSZ53PTAB(uint8_t x)
+	/*ZYMOSIS_INLINE*/ uint8_t IRAM_ATTR fSZ53PTAB(uint8_t x)
 	{
 		uint8_t t = x ^ (x >> 4);
 		t = t ^ (t >> 2);

@@ -158,8 +158,8 @@ enum {
 constexpr size_t SOUND_BUFFER_SIZE = (SAMPLE_RATE / ZX_FRAME_RATE * 2);
 
 volatile uint8_t* sound_buffer; // pointer to volatile array
-volatile uint16_t sound_wr_ptr;
-volatile uint16_t sound_rd_ptr;
+volatile uint32_t sound_wr_ptr;
+volatile uint32_t sound_rd_ptr;
 
 
 class str_ext { // is constexpr file-ext string class
@@ -298,10 +298,10 @@ protected:
 
  
 public:
-	ZYMOSIS_INLINE void emulateFrame()
+	/*ZYMOSIS_INLINE*/ void IRAM_ATTR emulateFrame()
 	{
 		static uint_fast32_t n, ticks, sacc;
-    static uint_fast8_t sout;
+    static uint_fast32_t sout;
     static uint_fast32_t sound_wr_ptr_l;
     
 		zymosis::Z80Cpu<Z48_ESPBoy>* zcpu = reinterpret_cast<zymosis::Z80Cpu<Z48_ESPBoy>*>(this);
@@ -332,7 +332,7 @@ public:
 	}
 
 
-/*ZYMOSIS_INLINE */void ICACHE_RAM_ATTR renderFrame()
+/*ZYMOSIS_INLINE */void IRAM_ATTR renderFrame()
 	{
 		static uint16_t i, j, ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		static uint_fast16_t ink, pap;
@@ -1005,7 +1005,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 
 
-void ICACHE_RAM_ATTR sound_ISR(){
+void IRAM_ATTR sound_ISR(){
   static int_fast32_t prev_wr_prt;
   
   if(prev_wr_prt != sound_wr_ptr && sound_wr_ptr != sound_rd_ptr){
@@ -1021,7 +1021,7 @@ void ICACHE_RAM_ATTR sound_ISR(){
 
 void zx_setup() {
     //system_update_cpu_freq(SYS_CPU_160MHZ);
-	  //	Wire.setClock(1000000); //I2C to 1mHz
+	  Wire.setClock(400000); //I2C to 400kHz
 
 		pad_state = 0;
 		pad_state_prev = 0;
@@ -1057,9 +1057,15 @@ void zx_setup() {
 
     TTOT = ESP.getCpuFreqMHz()*1000000/ZX_FRAME_RATE;
 
-		//filesystem init
-    //printFast_P(8, 120, PSTR("File system init..."), TFT_NAVY, 0);
+   //filesystem init
+   SPIFFSConfig cfg;
+   cfg.setAutoFormat(false);
+   SPIFFS.setConfig(cfg);
+   if(!SPIFFS.begin()){
+    printFast_P(8, 115, PSTR("File system init..."), TFT_MAGENTA, 0);
+    SPIFFS.format();
 		SPIFFS.begin();
+	 }
     
     delay(2000);
     espboy_logo_effect(1);
