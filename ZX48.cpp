@@ -1,12 +1,6 @@
 #pragma GCC optimize ("-Ofast")
 #pragma GCC push_options
 
-//v1.4 29.04.2020 new OTA for ESPboy App store v12 added (RomanS)
-//v1.3 12.03.2020 core rewritten to c++, memory and speed optimizations, ESPboy OTA v1.0 added by Plague(DmitryL) plague@gmx.co.uk
-//v1.2 06.01.2020 bug fixes, onscreen keyboard added, keyboard module support
-//v1.1 23.12.2019  z80 format v3 support, improved frameskip, screen and controls config files
-//v1.0 20.12.2019 initial version, with sound
-
 //by Shiru
 //shiru@mail.ru
 //https://www.patreon.com/shiru8bit
@@ -27,7 +21,7 @@
 
 #include <sigma_delta.h>
 #include "game.h"
-#include "FS.h"
+#include "LittleFS.h"
 
 
 /*
@@ -42,7 +36,7 @@
 
    Set SPI_FREQUENCY to 39000000 for best performance.
 
-   Games should be uploaded into SPIFFS as 48K .z80 snapshots (v1,v2,v3)
+   Games should be uploaded into LittleFS as 48K .z80 snapshots (v1,v2,v3)
    You can create such snapshots using ZXSPIN emulator
 
    You can also put a 6912 byte screen with the exact same name to be displayed before game
@@ -82,6 +76,10 @@ char filename[32];
 
 uint8_t port_fe;  //keyboard, tape, sound, border
 uint8_t port_1f;  //kempston joystick
+
+char extCfg[3]={'c','f','g'};
+char extScr[3]={'s','c','r'};
+char extZ80[3]={'z','8','0'};
 
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 55;
@@ -157,40 +155,10 @@ enum {
 
 constexpr size_t SOUND_BUFFER_SIZE = (SAMPLE_RATE / ZX_FRAME_RATE * 2);
 
-volatile uint8_t* sound_buffer; // pointer to volatile array
+volatile uint8_t sound_buffer[SOUND_BUFFER_SIZE]; // pointer to volatile array
 volatile uint32_t sound_wr_ptr;
 volatile uint32_t sound_rd_ptr;
 
-
-class str_ext { // is constexpr file-ext string class
-private:
-	const char* const p_;
-	const uint8_t sz_;
-public:
-
-	template<size_t N>
-	constexpr str_ext(const char(&a)[N]) : // ctor
-		p_(a), sz_(N - 1) {}
-	constexpr char operator[](size_t n) const { // []
-		return n < sz_ ? p_[n] : 0;
-	}
-	constexpr size_t size() const { return sz_; } // size()
-
-	constexpr uint32_t toUint32() const
-	{
-#if BYTE_ORDER == LITTLE_ENDIAN
-		return p_[0] + (p_[1] << 8) + (p_[2] << 16);
-#else
-		return (p_[0] << 24) + (p_[1] << 16) + (p_[2] << 8);
-#endif
-	}
-};
-
-enum {
-	EXT_Z80 = str_ext("z80").toUint32(),
-	EXT_SCR = str_ext("scr").toUint32(),
-	EXT_CFG = str_ext("cfg").toUint32(),
-};
 
 constexpr size_t MEMORY_SIZE = 0xC000;
 uint8_t* memory; //49152 bytes
@@ -455,7 +423,7 @@ void unrle(uint8_t* mem, size_t sz)
     fs::File f;
     
   if(filename[0]){
-		f = SPIFFS.open(filename, "r");
+		f = LittleFS.open(filename, "r");
 		if (!f) return 0;
 		sz = f.size();
 		f.readBytes((char*)header, sizeof(header));
@@ -598,7 +566,7 @@ void unrle(uint8_t* mem, size_t sz)
 
 uint8_t load_scr(const char* filename){
  if  (filename[0]){
-		fs::File f = SPIFFS.open(filename, "r");
+		fs::File f = LittleFS.open(filename, "r");
 		if (!f) return 0;
 		f.readBytes((char*)memory, 6912);
 		f.close();
@@ -827,7 +795,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	myESPboy.tft.fillScreen(TFT_BLACK);
 
-	dir = SPIFFS.openDir(path);
+	dir = LittleFS.openDir(path);
 
 	file_count = 0;
 	control_type = 0;
@@ -845,7 +813,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 
 	if (!file_count)
 	{
-		//printFast_P(1, 60, PSTR("Upload zx80 to SPIFFS"), TFT_RED, 0);
+		//printFast_P(1, 60, PSTR("Upload zx80 to LittleFS"), TFT_RED, 0);
 		//delay(1000);
     filename[0] = 0;
 	}
@@ -869,7 +837,7 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
 			if (pos > file_count - FILE_HEIGHT) pos = file_count - FILE_HEIGHT;
 			if (pos < 0) pos = 0;
 
-			dir = SPIFFS.openDir(path);
+			dir = LittleFS.openDir(path);
 			i = pos;
 			while (dir.next())
 			{
@@ -967,17 +935,18 @@ void file_browser(const char* path, const __FlashStringHelper* header, char* fna
       delay(100);
 		}
 
-		if (myESPboy.getKeys() & PAD_ESC) break;
+		if (myESPboy.getKeys() & PAD_ESC) {
+		  delay(100); 
+		  break;
+		}
 
-     delay(100);
 		/*if ((pad_state & PAD_LFT) || (pad_state & PAD_RGT)) {
 			fname[0] = 0;
 			break;
 		}*/
 
 		delay(1);
-		++frame;
-
+		frame++;
 		if (!(frame & 127)) change = 1;
 	}
 
@@ -1020,6 +989,7 @@ void IRAM_ATTR sound_ISR(){
 
 
 void zx_setup() {
+    //Serial.begin(115200);
     //system_update_cpu_freq(SYS_CPU_160MHZ);
 	  Wire.setClock(400000); //I2C to 400kHz
 
@@ -1058,13 +1028,13 @@ void zx_setup() {
     TTOT = ESP.getCpuFreqMHz()*1000000/ZX_FRAME_RATE;
 
    //filesystem init
-   SPIFFSConfig cfg;
+   LittleFSConfig cfg;
    cfg.setAutoFormat(false);
-   SPIFFS.setConfig(cfg);
-   if(!SPIFFS.begin()){
+   LittleFS.setConfig(cfg);
+   if(!LittleFS.begin()){
     printFast_P(8, 115, PSTR("File system init..."), TFT_MAGENTA, 0);
-    SPIFFS.format();
-		SPIFFS.begin();
+    LittleFS.format();
+		LittleFS.begin();
 	 }
     
     delay(2000);
@@ -1078,10 +1048,10 @@ void sound_init(void)
 {
 	uint16_t i;
 
-	sound_buffer = (uint8_t*)malloc(SOUND_BUFFER_SIZE);
+	//sound_buffer = (uint8_t*)malloc(SOUND_BUFFER_SIZE);
 
-	//for (i = 0; i < SOUND_BUFFER_SIZE; ++i) sound_buffer[i] = 0;
-  memset((uint8_t *)sound_buffer,0, SOUND_BUFFER_SIZE);
+	for (i = 0; i < SOUND_BUFFER_SIZE; ++i) sound_buffer[i] = 0;
+  //memset((uint8_t *)sound_buffer,0, SOUND_BUFFER_SIZE);
 
 	sound_rd_ptr = 0;
 	sound_wr_ptr = 0;
@@ -1096,16 +1066,16 @@ void sound_init(void)
 	interrupts();
 }
 
-void change_ext(char* fname, const uint32_t ext){
+void change_ext(char* fname, char* ext){
 if(fname[0]!=0) 
-	while (1)
-	{
-		if (!*fname) break;
-		if (*fname++ == '.')
+	for(uint8_t i; i<30; i++){
+		if (fname[i] == 0) break;
+		if (fname[i] == '.')
 		{
-			fname[0] = (uint8_t)(ext & 0xFF);
-			fname[1] = (uint8_t)((ext >> 8) & 0xFF);
-			fname[2] = (uint8_t)((ext >> 16) & 0xFF);
+			fname[i+1] = ext[0];
+			fname[i+2] = ext[1];
+			fname[i+3] = ext[2];
+      fname[i+4] = 0;
 			break;
 		}
 	}
@@ -1146,7 +1116,7 @@ void zx_load_layout(char* filename)
 	char cfg[8];
 
 	if(filename[0] != 0) {
-	  fs::File f = SPIFFS.open(filename, "r");
+	  fs::File f = LittleFS.open(filename, "r");
     if (!f) return;
     f.readBytes(cfg, 8);
     f.close();
@@ -1266,10 +1236,10 @@ void zx_loop()
 
 		//if (*filename) // filename is not ""
 		//{
-			change_ext(filename, EXT_CFG);
+			change_ext(filename, extCfg);
 			zx_load_layout(filename);
 
-			change_ext(filename, EXT_SCR);
+			change_ext(filename, extScr);
 			if (cpu.load_scr(filename))
 			{
 				cpu.renderFrame();
@@ -1277,12 +1247,12 @@ void zx_loop()
 				wait_any_key(3 * 1000);
 			}
 
-			change_ext(filename, EXT_Z80);
+			change_ext(filename, extZ80);
 			cpu.Z80_Reset();
 			cpu.load_z80(filename);
 		//}
 
-		SPIFFS.end();
+		LittleFS.end();
 
     pad_state = 0;
     pad_state_prev = 0;
