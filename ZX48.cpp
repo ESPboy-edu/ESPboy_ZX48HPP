@@ -338,12 +338,14 @@ public:
   }
 
   row = 16;
+  myESPboy.tft.setAddrWindow(0, row, 128, 96);
 
   for (ln = 0; ln < 192; ln += 2)
   {
     if (!(line_change[ln / 8] & (3 << (ln & 7))))
     {
-      ++row;
+      row++;
+      myESPboy.tft.setAddrWindow(0, row, 128, 96);
       continue;
     }
 
@@ -378,7 +380,9 @@ public:
       }
     }
 
-    myESPboy.tft.pushImage(0, row++, 128, 1, line_buffer);
+    //myESPboy.tft.pushImage(0, row++, 128, 1, line_buffer);
+    row++;
+    myESPboy.tft.pushPixels(line_buffer, 128); 
   }
 
  static uint_fast32_t startTime;
