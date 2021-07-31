@@ -1,4 +1,5 @@
-#pragma GCC optimize ("-Ofast")
+//#pragma GCC optimize ("-Ofast")
+#pragma GCC optimize ("-O3")
 #pragma GCC push_options
 
 //by Shiru
@@ -67,11 +68,11 @@ uint8_t pad_state_prev;
 uint8_t pad_state_t;
 uint8_t keybModuleExist;
 
-static uint16_t line_buffer[128] __attribute__ ((aligned));
+static uint16_t line_buffer[128] __attribute__ ((aligned(32)));
 
 bool border_changed = false;
 
-uint8_t line_change[24]; //bit mask to updating each line
+uint8_t line_change[192]; //bit mask to updating each line
 char filename[32];
 
 uint8_t port_fe;  //keyboard, tape, sound, border
@@ -195,11 +196,11 @@ protected:
 					if (addr < 0x1800)
 					{
 						line = ((addr / 256) & 7) + ((addr / 32) & 7) * 8 + addr / 2048 * 64;
-						line_change[line / 8] |= (1 << (line & 7));
+						line_change[line] = 255;
 					}
 					else
 					{
-						line_change[(addr - 0x1800) / 32] = 255;
+						line_change[(addr - 0x1800) / 4] = 255;
 					}
 				}
 			}
@@ -340,16 +341,18 @@ public:
   row = 16;
   myESPboy.tft.setAddrWindow(0, row, 128, 96);
 
+
   for (ln = 0; ln < 192; ln += 2)
   {
-    if (!(line_change[ln / 8] & (3 << (ln & 7))))
+   if (line_change[ln] == 0 && line_change[ln+1] == 0)
     {
       row++;
       myESPboy.tft.setAddrWindow(0, row, 128, 96);
       continue;
     }
 
-    line_change[ln / 8] &= ~(3 << (ln & 7));
+    line_change[ln] = 0;
+    line_change[ln+1] = 0;
 
     pptr1 = (ln & 7) * 256 + ((ln / 8) & 7) * 32 + (ln / 64) * 2048;
     pptr2 = pptr1 + 256;
