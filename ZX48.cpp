@@ -178,6 +178,10 @@ protected:
 
 		key_matriz.reset();
 
+    pad_state = 0;
+    pad_state_prev = 0;
+    pad_state_t = 0;
+
 		port_fe = 0;
 		port_1f = 0;
 	}
@@ -1001,10 +1005,6 @@ void zx_setup() {
     //Serial.begin(115200);
     //system_update_cpu_freq(SYS_CPU_160MHZ);
 	  Wire.setClock(400000); //I2C to 400kHz
-
-		pad_state = 0;
-		pad_state_prev = 0;
-		pad_state_t = 0;
 
      //Init ESPboy
     myESPboy.begin("ZX Spectrum 48k");
