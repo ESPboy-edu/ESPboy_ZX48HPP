@@ -17,6 +17,9 @@
 //#pragma GCC optimize ("-Ofast")
 //#pragma GCC push_options
 
+#pragma GCC optimize ("-O3")
+#pragma GCC push_options
+
 #include <cstdint>
 
  /* define either ZYMOSIS_LITTLE_ENDIAN or ZYMOSIS_BIG_ENDIAN */
