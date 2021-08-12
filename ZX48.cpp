@@ -84,7 +84,7 @@ char extZ80[3]={'z','8','0'};
 
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 55;
-constexpr uint_fast32_t SAMPLE_RATE = 22000;   //more is better, but emulations gets slower
+constexpr uint_fast32_t SAMPLE_RATE = 44000;   //more is better, but emulations gets slower
 constexpr uint_fast32_t MAX_FRAMESKIP = 8;
 static uint_fast32_t TTOT; //pause delay to provide right fps, sets in setup();
 

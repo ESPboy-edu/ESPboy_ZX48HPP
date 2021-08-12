@@ -1,3 +1,4 @@
+//v1.7 12.08.2021 LittleFS again, numorous small optimizations (Romans)
 //v1.6 30.05.2021 SPIFFS returned back, some INLINE to CACHE and int8_t to int32_t optimisations (Romans)
 //v1.5 25.04.2021 del OTA, change SPIFFS to Little FS, fixed render (border) fixed file list navigation (RomanS)
 //v1.4 29.04.2020 new OTA for ESPboy App store, reading the game from PROGMEM if no one on SPIFFS, sound noise bugfix (RomanS)
