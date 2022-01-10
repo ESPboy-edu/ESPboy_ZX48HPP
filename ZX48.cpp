@@ -72,7 +72,7 @@ static uint16_t line_buffer[128] __attribute__ ((aligned(32)));
 
 bool border_changed = false;
 
-uint8_t line_change[24]; //bit mask to updating each line
+uint8_t line_change[24] __attribute__ ((aligned(32))); //bit mask to updating each line
 char filename[32];
 
 uint8_t port_fe;  //keyboard, tape, sound, border
@@ -85,7 +85,7 @@ char extZ80[3]={'z','8','0'};
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 55;
 constexpr uint_fast32_t SAMPLE_RATE = 44000;   //more is better, but emulations gets slower
-constexpr uint_fast32_t MAX_FRAMESKIP = 8;
+constexpr uint_fast32_t MAX_FRAMESKIP = 5;
 static uint_fast32_t TTOT; //pause delay to provide right fps, sets in setup();
 
 #define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
@@ -1007,7 +1007,7 @@ void zx_setup() {
 	  Wire.setClock(400000); //I2C to 400kHz
 
      //Init ESPboy
-    myESPboy.begin("ZX Spectrum 48k");
+    myESPboy.begin("ZX48 Zymosis core");
   
   
     espboy_logo_effect(0);   
