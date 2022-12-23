@@ -1,3 +1,4 @@
+//v1.8 23.12.2022 nbSPI rendering added + speed restriction to real ZX speed (RomanS)
 //v1.7 12.08.2021 LittleFS again, numorous small optimizations (Romans)
 //v1.6 30.05.2021 SPIFFS returned back, some INLINE to CACHE and int8_t to int32_t optimisations (Romans)
 //v1.5 25.04.2021 del OTA, change SPIFFS to Little FS, fixed render (border) fixed file list navigation (RomanS)
