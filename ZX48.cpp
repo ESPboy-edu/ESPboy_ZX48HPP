@@ -70,8 +70,8 @@ uint8_t pad_state_prev;
 uint8_t pad_state_t;
 uint8_t keybModuleExist;
 
-static uint16_t line_buffer_1[128] __attribute__ ((aligned(32)));
-static uint16_t line_buffer_2[128] __attribute__ ((aligned(32)));
+uint16_t line_buffer_1[128] __attribute__ ((aligned(32)));
+uint16_t line_buffer_2[128] __attribute__ ((aligned(32)));
 
 bool border_changed = false;
 
@@ -338,7 +338,7 @@ public:
 		  swplh(RGB565Q(255, 255, 255)),
 		};
 
- 
+  myESPboy.tft.startWrite(); 
   
   if (border_changed)
   {
