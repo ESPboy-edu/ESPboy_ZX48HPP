@@ -338,6 +338,7 @@ public:
 		  swplh(RGB565Q(255, 255, 255)),
 		};
 
+  while(nbSPI_isBusy());
   myESPboy.tft.startWrite(); 
   
   if (border_changed)
