@@ -23,7 +23,9 @@
 #include <sigma_delta.h>
 #include "game.h"
 #include "LittleFS.h"
+#include "nbSPI.h"
 
+#define SIGMA_DELTA_RATE 16000
 
 /*
    IMPORTANT: the project consumes a lot of RAM, to allow enough set
@@ -68,7 +70,8 @@ uint8_t pad_state_prev;
 uint8_t pad_state_t;
 uint8_t keybModuleExist;
 
-static uint16_t line_buffer[128] __attribute__ ((aligned(32)));
+static uint16_t line_buffer_1[128] __attribute__ ((aligned(32)));
+static uint16_t line_buffer_2[128] __attribute__ ((aligned(32)));
 
 bool border_changed = false;
 
@@ -84,11 +87,10 @@ char extZ80[3]={'z','8','0'};
 
 constexpr uint_fast32_t ZX_CLOCK_FREQ = 3500000;
 constexpr uint_fast32_t ZX_FRAME_RATE = 55;
-constexpr uint_fast32_t SAMPLE_RATE = 44000;   //more is better, but emulations gets slower
+constexpr uint_fast32_t SAMPLE_RATE = 16000;   //more is better, but emulations gets slower
 constexpr uint_fast32_t MAX_FRAMESKIP = 5;
 static uint_fast32_t TTOT; //pause delay to provide right fps, sets in setup();
 
-#define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
 
 enum {
 	K_CS = 0, K_Z, K_X, K_C, K_V,
@@ -306,34 +308,38 @@ public:
 	}
 
 
+#define swplh(x) ((x>>8)|(x<<8))
+#define RGB565Q(r,g,b)    ( ((((r)>>5)&0x1f)<<11) | ((((g)>>4)&0x3f)<<5) | (((b)>>5)&0x1f) )
+
 /*ZYMOSIS_INLINE */void IRAM_ATTR renderFrame()
-	{
+	{ 
+    static bool flip;
 		static uint16_t i, j, ch, ln, px, row, aptr, optr, attr, pptr1, pptr2, bright;
 		static uint_fast16_t ink, pap;
 		static uint_fast16_t col = 0;
 		static uint8_t line1, line2;
 
 		static const uint_fast16_t palette[16] = {
-		  RGB565Q(0, 0, 0),
-		  RGB565Q(0, 29, 200),
-		  RGB565Q(216, 36, 15),
-		  RGB565Q(213, 48, 201),
-		  RGB565Q(0, 199, 33),
-		  RGB565Q(0, 201, 203),
-		  RGB565Q(206, 202, 39),
-		  RGB565Q(203, 203, 203),
-		  RGB565Q(0, 0, 0),
-		  RGB565Q(0, 39, 251),
-		  RGB565Q(255, 48, 22),
-		  RGB565Q(255, 63, 252),
-		  RGB565Q(0, 249, 44),
-		  RGB565Q(0, 252, 254),
-		  RGB565Q(255, 253, 51),
-		  RGB565Q(255, 255, 255),
+		  swplh(RGB565Q(0, 0, 0)),
+		  swplh(RGB565Q(0, 29, 200)),
+		  swplh(RGB565Q(216, 36, 15)),
+		  swplh(RGB565Q(213, 48, 201)),
+		  swplh(RGB565Q(0, 199, 33)),
+		  swplh(RGB565Q(0, 201, 203)),
+		  swplh(RGB565Q(206, 202, 39)),
+		  swplh(RGB565Q(203, 203, 203)),
+		  swplh(RGB565Q(0, 0, 0)),
+		  swplh(RGB565Q(0, 39, 251)),
+		  swplh(RGB565Q(255, 48, 22)),
+		  swplh(RGB565Q(255, 63, 252)),
+		  swplh(RGB565Q(0, 249, 44)),
+		  swplh(RGB565Q(0, 252, 254)),
+		  swplh(RGB565Q(255, 253, 51)),
+		  swplh(RGB565Q(255, 255, 255)),
 		};
 
-
-
+ 
+  
   if (border_changed)
   {
     border_changed = false;
@@ -352,6 +358,7 @@ public:
     if (!(line_change[ln / 8] & (3 << (ln & 7))))
     {
       row++;
+      while(nbSPI_isBusy());
       myESPboy.tft.setAddrWindow(0, row, 128, 96);
       continue;
     }
@@ -380,19 +387,30 @@ public:
         col += (line1 & 0x40) ? ink : pap;
         col += (line2 & 0x80) ? ink : pap;
         col += (line2 & 0x40) ? ink : pap;
-
-        line_buffer[optr++] = col;
+        
+        if(flip)
+          line_buffer_1[optr++] = col;
+        else
+          line_buffer_2[optr++] = col;
 
         line1 <<= 2;
         line2 <<= 2;
       }
     }
 
-    //myESPboy.tft.pushImage(0, row++, 128, 1, line_buffer);
+
+    while(nbSPI_isBusy());
+    if(flip)
+      nbSPI_writeBytes((uint8_t*)line_buffer_1, 256);
+    else
+      nbSPI_writeBytes((uint8_t*)line_buffer_2, 256);
+    //myESPboy.tft.pushPixels(line_buffer, 128); 
+
     row++;
-    myESPboy.tft.pushPixels(line_buffer, 128); 
+    flip=!flip;
   }
 
+ 
  static uint_fast32_t startTime;
  while (((ESP.getCycleCount()) - startTime) < TTOT /*it's global, sets in setup()*/);
  startTime = ESP.getCycleCount(); 
@@ -655,10 +673,10 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				col = pgm_read_byte(&bitmap[off++]);
 				rgb = pgm_read_dword(&bitmap[54 + col * 4]);
 				c16 = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
-				line_buffer[j] = c16;
+				line_buffer_1[j] = c16;
 			}
 
-			myESPboy.tft.pushImage(x, y + i, w, 1, line_buffer);
+			myESPboy.tft.pushImage(x, y + i, w, 1, line_buffer_1);
 		}
 	}
 	else
@@ -672,11 +690,11 @@ void drawBMP8Part(int16_t x, int16_t y, const uint8_t bitmap[], int16_t dx, int1
 				col = pgm_read_byte(&bitmap[off]);
 				rgb = pgm_read_dword(&bitmap[54 + col * 4]);
 				c16 = ((rgb & 0xf8) >> 3) | ((rgb & 0xfc00) >> 5) | ((rgb & 0xf80000) >> 8);
-				line_buffer[j] = c16;
+				line_buffer_1[j] = c16;
 				off -= wa;
 			}
 
-			myESPboy.tft.pushImage(x + i, y, 1, h, line_buffer);
+			myESPboy.tft.pushImage(x + i, y, 1, h, line_buffer_1);
 		}
 	}
 }
@@ -694,12 +712,12 @@ void drawCharFast(uint16_t x, uint16_t y, uint8_t c, uint16_t color, uint16_t bg
 		for (j = 0; j < 8; ++j)
 		{
 			c16 = (line & 1) ? color : bg;
-			line_buffer[j * 5 + i] = c16;
+			line_buffer_1[j * 5 + i] = c16;
 			line >>= 1;
 		}
 	}
 
-	myESPboy.tft.pushImage(x, y, 5, 8, line_buffer);
+	myESPboy.tft.pushImage(x, y, 5, 8, line_buffer_1);
 }
 
 
@@ -1050,6 +1068,7 @@ void zx_setup() {
     espboy_logo_effect(1);
     myESPboy.tft.fillScreen(TFT_BLACK);
     delay(1000);
+    myESPboy.tft.startWrite();
 }
 
 
@@ -1066,12 +1085,12 @@ void sound_init(void)
 	sound_wr_ptr = 0;
 
 	noInterrupts();
-	sigmaDeltaSetup(0, F_CPU / 256);
+	sigmaDeltaSetup(0, 16000);
 	sigmaDeltaAttachPin(SOUNDPIN);
 	sigmaDeltaEnable();
 	timer1_attachInterrupt(sound_ISR);
 	timer1_enable(TIM_DIV1, TIM_EDGE, TIM_LOOP);
-	timer1_write(ESP.getCpuFreqMHz() * 1000000 / SAMPLE_RATE);
+	timer1_write(80000000 / SAMPLE_RATE);
 	interrupts();
 }
 
