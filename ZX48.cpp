@@ -339,7 +339,7 @@ public:
 		};
 
   while(nbSPI_isBusy());
-  myESPboy.tft.startWrite(); 
+  //myESPboy.tft.startWrite(); 
   
   if (border_changed)
   {
